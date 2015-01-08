@@ -19,28 +19,29 @@ static void internal_error(int signal) {
         case 111:
             printf("Could not connect. Check that the server is up?\n"
                    "Expected arguments: ./mcc [<SERVER> [<PORT>]]\n");
-            exit(EXIT_FAILURE);
+            break;
         case 1000:
             printf("Invalid arguments.\n"
                    "Expected arguments: ./mcc [<SERVER> [<PORT>]]\n");
-            exit(EXIT_FAILURE);
+            break;
         case 1001:
             printf("Invalid port.\n"
                    "Expected arguments: ./mcc [<SERVER> [<PORT>]]\n");
-            exit(EXIT_FAILURE);
+            break;
+        case 2000:
+            printf("Did the server die?\n");
+            break;
         case 3000:
             printf("Got a non-positive packet\n");
-            exit(EXIT_FAILURE);
+            break;
         case 3001:
             printf("Got packet of size 0.\n");
-            exit(EXIT_FAILURE);
+            break;
         case 3002:
             printf("Packet len isn't right.\n");
-            exit(EXIT_FAILURE);
+            break;
         default:
             printf("Undocumented error code :(\n");
-            exit(EXIT_FAILURE);
-            break;
     }
-
+    exit(errno);
 }
