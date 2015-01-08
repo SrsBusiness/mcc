@@ -1,3 +1,5 @@
+#include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <time.h>
 #include "sample_defender.h"
@@ -6,27 +8,33 @@
 #include "protocol.h"
 #include "bot.h"
 #include "api.h"
+#include "exceptions.h"
 
 #define SERVER_NAME "localhost"
 #define DEFAULT_SERVER_PORT 25565
 #define NUM_BOTS 2
 
+extern int errno;
+
 int main(int argc, char *argv[], char **envp)
 {
     char *server_name = SERVER_NAME;
-    int server_port = DEFAULT_SERVER_PORT;
+    int server_port = DEFAULT_SERVER_PORT;\
+
+    signal(SIGINT, internal_error);
+
     if (argc == 3) {
         server_name = argv[1];
         server_port = strtol(argv[2], NULL, 10);
         if (!server_port) {
-            printf("Expected arguments: ./mcc [<SERVER> [<PORT>]]\n");
-            return 0;
+            errno = 1001;
+            raise(SIGINT);
         }
     } else if (argc == 2) {
         server_name = argv[1];
     } else if (argc > 3) {
-        printf("Expected arguments: ./mcc [<SERVER> [<PORT>]]\n");
-        return 0;
+        errno = 1000;
+        raise(SIGINT);
     }
 
     bot_t *bots[NUM_BOTS];

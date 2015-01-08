@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <signal.h>
+#include <errno.h>
 #include "protocol.h"
 #include "marshal.h"
 #include "bot.h"
@@ -18,6 +20,8 @@
     int8_t packet[BOT->_data->packet_threshold];              \
     length = format_packet(BOT, &PACKET, (void *) &packet);   \
     send_raw(bot, packet, length);                            \
+
+extern int errno;
 
 /*
  * Handshaking serverbound functions
@@ -573,7 +577,10 @@ void *protocol_decode(bot_t *bot)
 {
     int32_t pid = receive_packet(bot);
     if (pid < 0) {
-        if (pid == -1) exit(123);
+        if (pid == -1) {
+            errno = 2000;
+            raise(SIGINT);            
+        }
         return NULL;
     }
     void *recv_struct = NULL;

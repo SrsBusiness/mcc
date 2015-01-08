@@ -53,7 +53,10 @@ bool next_int_token(int* value, char *string, char **saveptr)
 
 void execute_command(bot_t *bot, char *command, char *strargs)
 {
-    if (strcmp(command, "slot") == 0) {
+    if (strcmp(command, "help") == 0) {
+        send_play_serverbound_chat(bot, "Available commands:");
+        send_play_serverbound_chat(bot, "slot, ");
+    } else if (strcmp(command, "slot") == 0) {
         char **saveptr = calloc(1, sizeof(char *));
         bool valid_input = true;
         char *token = NULL;

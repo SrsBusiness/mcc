@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
+#include <errno.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/time.h>
@@ -8,7 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <assert.h>
 #include "bot.h"
 #include "protocol.h"
 #include "marshal.h"
@@ -195,17 +196,24 @@ int receive_packet(bot_t *bot)
     memset(bot->_data->buf, 0, bot->_data->packet_threshold);
     for (i = 0; i < 5; i++) {
         ret = receive_raw(bot, bot->_data->buf + i, 1);
-        if (ret <= 0)
-            return -1;
+        if (ret <= 0) {
+            errno = 3000;
+            raise(SIGINT);
+        }
         if (!expect_more(bot->_data->buf[i]))
             break;
     }
 
     len = varint32(bot->_data->buf, &packet_size);
-    if (packet_size == 0)
-        return -2;
+    if (packet_size == 0) {
+        errno = 3001;
+        raise(SIGINT);
+    }
 
-    assert(i != len);
+    if (i == len) {
+        errno = 3002;
+        raise(SIGINT);
+    }
 
     packet_size += len;
     received = i + 1;
