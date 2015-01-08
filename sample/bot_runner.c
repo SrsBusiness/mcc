@@ -22,6 +22,7 @@ int main(int argc, char *argv[], char **envp)
     int server_port = DEFAULT_SERVER_PORT;\
 
     signal(SIGINT, internal_error);
+    signal(SIGPIPE, internal_error);
 
     if (argc == 3) {
         server_name = argv[1];

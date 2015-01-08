@@ -16,16 +16,18 @@ static void internal_error(int signal) {
         case 0:
             printf("Program terminated by user.\n");
             exit(EXIT_SUCCESS);
+        case 111:
+            printf("Could not connect. Check that the server is up?\n"
+                   "Expected arguments: ./mcc [<SERVER> [<PORT>]]\n");
+            exit(EXIT_FAILURE);
         case 1000:
             printf("Invalid arguments.\n"
                    "Expected arguments: ./mcc [<SERVER> [<PORT>]]\n");
             exit(EXIT_FAILURE);
-            break;
         case 1001:
             printf("Invalid port.\n"
                    "Expected arguments: ./mcc [<SERVER> [<PORT>]]\n");
             exit(EXIT_FAILURE);
-            break;
         case 3000:
             printf("Got a non-positive packet\n");
             exit(EXIT_FAILURE);
