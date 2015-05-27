@@ -6,6 +6,9 @@
 #include "marshal.h"
 #include "bot.h"
 #include "protocol.h"
+#include "nbt.h"
+
+static void *marshal_slot(void *_packet_raw, int16_t block_id, int8_t count, int16_t damage, nbt_node *tree);
 
 // returns the number of bytes read from data
 int varint64(char *data, int64_t *value)
@@ -110,6 +113,8 @@ void reverse(void *number, int len)
 size_t format_sizeof(char c)
 {
     switch(c) {
+    case 'k':
+        return sizeof(slot_t);
     case 's':
         return sizeof(void *);
     case 'v':
@@ -213,6 +218,12 @@ int format_packet(bot_t *bot, void *packet_data, void *packet_raw)
         size = format_sizeof(*fmt);
         packet_data = (void *)align(packet_data, size);
         switch(*fmt) {
+
+        case 'k':{ /* k is for slot. What, do you have a better idea? */
+            slot_t *slot_data = packet_data;
+            packet_raw  = marshal_slot(packet_raw, slot_data->block_id, slot_data->count, slot_data->damage, slot_data->tree);
+            break;
+        }       
         case 's': // string (null terminated)
             ;
             char *str = *((char **)packet_data);
@@ -268,8 +279,8 @@ int format_packet(bot_t *bot, void *packet_data, void *packet_raw)
     return packet_raw - save + varlen;
 }
 
-
-void *marshal_slot(void *_packet_raw, int len, int16_t block_id, int8_t count, int16_t damage, nbt_t *nbt_data)
+/* TODO: Add bounds checking on packet_raw */
+void *marshal_slot(void *_packet_raw, int16_t block_id, int8_t count, int16_t damage, nbt_node *tree)
 {
     char *packet_raw = _packet_raw;
     if (-1 == block_id) { // Empty slot is 0xffff
@@ -291,12 +302,15 @@ void *marshal_slot(void *_packet_raw, int len, int16_t block_id, int8_t count, i
         /* copy damage (2 bytes) */
         memcpy(packet_raw, &damage, sizeof(damage));
         packet_raw += sizeof(damage);
+                  
+        if (tree) {
+            /* convert nbt tree to binary nbt data */
+            struct buffer nbt_data = nbt_dump_binary(tree);
 
-        if (nbt_data->length > 0) {
             memset(packet_raw, 1, sizeof(int8_t));
             packet_raw += sizeof(int8_t);
-            memcpy(packet_raw, nbt_data->data, nbt_data->length);
-            packet_raw += nbt_data->length;
+            memcpy(packet_raw, nbt_data.data, nbt_data.len);
+            packet_raw += nbt_data.len;
         } else {
             memset(packet_raw, 0, sizeof(int8_t));
             packet_raw += sizeof(int8_t);

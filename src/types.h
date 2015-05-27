@@ -1,4 +1,6 @@
 #pragma once
+#include "nbt.h"
+
 
 typedef uint64_t position_t;
 typedef int32_t vint32_t;
@@ -16,7 +18,7 @@ typedef struct _slot_t {
     int16_t block_id;
     int8_t count;
     int16_t damage;
-    nbt_t nbt;
+    nbt_node *tree;
 } slot_t;
 
 

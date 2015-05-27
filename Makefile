@@ -3,11 +3,11 @@ VERSION = 0.0.1
 CC      = gcc
 SA      = scan-build
 
-DIR 	:= $(pwd)
+DIR 	:= $(shell pwd)
 
-CFLAGS  = -c -fpic -Wall -Isrc --std=gnu99
+CFLAGS  = -c -fpic -Wall -Isrc -IcNBT --std=gnu99
 NBTFLAGS = -c -Wall -IcNBT -Wextra -std=c99 -pedantic -fPIC
-LDFLAGS = -lpthread -lm
+LDFLAGS = -lpthread -lm -lz
 
 SRC		= src
 NBTSRC	= cNBT
@@ -29,7 +29,7 @@ SAMPLE		:= $(patsubst %.c,%.o,$(wildcard sample/*.c))
 all: $(TARGET)
 
 $(TARGET): $(SHAREDLIB) $(SAMPLE) | $(BIN)
-	$(CC) $(LDFLAGS) $(OBJECTS) $(SAMPLE) -o $@
+	$(CC) $(SAMPLE) $(OBJECTS) $(NBTOBJECTS) -o $@ $(LDFLAGS)
 
 # Rules for making all object files
 $(OBJ)/%.o: $(SRC)/%.c | $(OBJ)
@@ -41,15 +41,23 @@ $(NBTOBJ)/%.o: $(NBTSRC)/%.c | $(NBTOBJ)
 # Rule for making shared object file
 $(SHAREDLIB): $(OBJECTS) $(NBTOBJECTS) | $(LIB)
 	$(CC) -shared -o $@ $(OBJECTS) $(NBTOBJECTS)
+	ln $(SHAREDLIB) $(LIB)/libmcc.so
 
-.PHONY: tests
-tests: $(SHAREDLIB) $(TEST) | $(BIN)
-	$(CC) $(LDFLAGS) $(OBJECTS) $(TEST) -o bin/$@
-	bin/$@
+.PHONY: test
+test: $(SHAREDLIB) $(TEST) | $(BIN)
+	$(CC) $(TEST) $(OBJECTS) $(NBTOBJECTS) -o $(BIN)/$@ $(LDFLAGS)
+	$(BIN)/$@
+
+# I don't understand this rule, but it works
+.PHONY: run
+run: export LD_LIBRARY_PATH=$(DIR)/$(LIB)
+run: $(SHAREDLIB)
+	$(BIN)/$(EXEC)
 
 .PHONY: clean
 clean:
 	$(RM) $(OBJECTS) $(NBTOBJECTS) $(TEST) $(SAMPLE) $(BIN)/* $(SHAREDLIB)
+	unlink $(LIB)/libmcc.so
 
 $(NBTOBJ): | $(OBJ)
 	mkdir -p $@
