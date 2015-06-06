@@ -8,7 +8,7 @@
 #include "protocol.h"
 #include "nbt.h"
 
-static void *marshal_slot(void *_packet_raw, int16_t block_id, int8_t count, int16_t damage, nbt_node *tree);
+static void *marshal_slot(void *_packet_raw, slot_t *slot_data);
 
 // returns the number of bytes read from data
 int varint64(char *data, int64_t *value)
@@ -73,41 +73,31 @@ int varint32_encode(int32_t value, char *data, int len)
 
 // a generalized form of the hton functions
 // in the sockets library convert numbers to
-// their Big-endian format. To avoid complications
-// with types, the conversion will be done in place,
-// rather than returning the converted value.
-// In addition, this function extends to 64 and 128 bit
+// their Big-endian format. This function extends to 64 bit
 // words as well.
-void reverse(void *number, int len)
+uint64_t reverse(uint64_t number, int len)
 {
+    //printf("Unreversed: %llx, size: %d\n", number, len);
     if(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) { // we need to fliparoo!
         switch(len) {
-        case sizeof(int8_t):
-            return;
-        case sizeof(int16_t):
-            *((uint16_t *)number) = __builtin_bswap16(*((uint16_t *)number));
+        case sizeof(uint8_t):
             break;
-        case sizeof(int32_t):
-            *((uint32_t *)number) = __builtin_bswap32(*((uint32_t *)number));
+        case sizeof(uint16_t):
+            number = __builtin_bswap16(number);
             break;
-        case sizeof(int64_t):
-            *((uint64_t *)number) = __builtin_bswap64(*((uint64_t *)number));
+        case sizeof(uint32_t):
+            number = __builtin_bswap32(number);
             break;
-        case sizeof(__int128_t):
-            ;
-            uint64_t *l = number;
-            uint64_t *h = number + sizeof(int64_t);
-            *l = __builtin_bswap64(*l);
-            *h = __builtin_bswap64(*h);
-            *l ^= *h;
-            *h ^= *l;
-            *l ^= *h;
+        case sizeof(uint64_t):
+            number = __builtin_bswap64(number);
             break;
         default:
             fprintf(stderr, "Bad word size\n");
-            return;
+            exit(-1);
         }
     }
+    //printf("Reversed: %llx, size: %d\n", number, len);
+    return number;
 }
 
 size_t format_sizeof(char c)
@@ -116,7 +106,7 @@ size_t format_sizeof(char c)
     case 'k':
         return sizeof(slot_t);
     case 's':
-        return sizeof(void *);
+        return sizeof(char *);
     case 'v':
         return sizeof(vint32_t);
     case '*':
@@ -130,7 +120,7 @@ size_t format_sizeof(char c)
     case 'l':
         return sizeof(int64_t);
     case 'q':
-        return sizeof(__int128_t);
+        return 2 * sizeof(int64_t);
     default:
         fprintf(stderr, "Bad format specifier\n");
         return -1;
@@ -141,89 +131,58 @@ size_t format_sizeof(char c)
 // then returns the address where the next datum is to be pushed
 void *push(void *buffer, void *data, size_t size)
 {
-    switch(size) {
-    case sizeof(int8_t):
-        *(int8_t *)buffer = *(int8_t *)data;
-        buffer += size;
-        break;
-    case sizeof(int16_t):
-        *(int16_t *)buffer = *(int16_t *)data;
-        buffer += size;
-        break;
-    case sizeof(int32_t):
-        *(int32_t *)buffer = *(int32_t *)data;
-        buffer += size;
-        break;
-    case sizeof(int64_t):
-        *(int64_t *)buffer = *(int64_t *)data;
-        buffer += size;
-        break;
-    case sizeof(__int128_t):
-        *(__int128_t *)buffer = *(__int128_t *)data;
-        buffer += size;
-        break;
-    }
-    return buffer;
+    memcpy(buffer, data, size);
+    return (char *)buffer + size;
 }
 
-// Read size bytes from buf as an integer and
-// returns the 128 bit integer at the top of the buffer
-__int128_t value_at(void *buf, size_t size)
+// Reads an integer of size bytes from the top of buf
+// and returns it as a 64 bit integer
+uint64_t value_at(void *buf, size_t size)
 {
-    switch(size) {
-    case sizeof(int8_t):
-        return *(int8_t *)buf;
-    case sizeof(int16_t):
-        return *(int16_t *)buf;
-    case sizeof(int32_t):
-        return *(int32_t *)buf;
-    case sizeof(int64_t):
-        return *(int64_t *)buf;
-    case sizeof(__int128_t):
-        return *(__int128_t *)buf;
-    }
-    // if you're here, you're wrong
-    assert(0);
-}
+    uint64_t value = 0;
 
-void reentrant_memmove(void *dest, void *src, size_t len)
-{
-    // shift backwards, read forwards
-    if(dest < src)
-        while(len--)
-            *(uint8_t *)dest++ = *(uint8_t *)src++;
-    // shift forwards, read backwards
+    if(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+        memcpy(&value, buf, size);
     else
-        while(len--)
-            *(uint8_t *)(dest + len) = *(uint8_t *)(src + len);
+        memcpy(&value + sizeof(value) - size, buf, size);
 
+    return value;
 }
 
 // puts the raw packet data from the struct packet_data into packet_raw
 // returns the number of bytes written to packet_raw, or -1 if packet_raw
 // is not a long enough array
-int format_packet(bot_t *bot, void *packet_data, void *packet_raw)
+int format_packet(bot_t *bot, void *_packet_data, void *_packet_raw)
 {
+    char *packet_data = _packet_data;
+    char *packet_raw = _packet_raw;
+
     uint32_t len = bot->_data->packet_threshold;
     uint32_t value = 0;
     uint32_t varlen = 0;
-    size_t arr_len = 0;
+    uint64_t arr_len = 0;
     char varint[5];
-    size_t size;
+    uint64_t size;
 
     char *fmt = *((char **)packet_data);
-    packet_data += sizeof(void *);
-    void *save = packet_raw;
+    packet_data += sizeof(char *);
+    char *save = packet_raw;
+
+    uint64_t network_order;
+
     while(*fmt) {
         size = format_sizeof(*fmt);
-        packet_data = (void *)align(packet_data, size);
+        packet_data = (char *)align(packet_data, size);
         switch(*fmt) {
-
         case 'k':{ /* k is for slot. What, do you have a better idea? */
-            slot_t *slot_data = packet_data;
-            packet_raw  = marshal_slot(packet_raw, slot_data->block_id, slot_data->count, slot_data->damage, slot_data->tree);
+            slot_t *slot_data = (slot_t *)packet_data;
+            packet_raw  = marshal_slot(packet_raw, slot_data);
             break;
         }       
+        case 'q':
+            memcpy(packet_raw, packet_data, size);
+            packet_raw += size;
+            break;
         case 's': // string (null terminated)
             ;
             char *str = *((char **)packet_data);
@@ -231,9 +190,9 @@ int format_packet(bot_t *bot, void *packet_data, void *packet_raw)
             varlen = varint32_encode(value, varint, 5);
             if(packet_raw - save + varlen + value > len)
                 return -1; // TODO: compression
-            reentrant_memmove(packet_raw, varint, varlen);
+            memmove(packet_raw, varint, varlen);
             packet_raw += varlen;
-            reentrant_memmove(packet_raw, str, value);
+            memmove(packet_raw, str, value);
             packet_raw += value;
             break;
         case 'v': // varint32_t
@@ -243,7 +202,7 @@ int format_packet(bot_t *bot, void *packet_data, void *packet_raw)
             varlen = varint32_encode(value, varint, 5);
             if(packet_raw - save + varlen > len)
                 return -1; // TODO: compression
-            reentrant_memmove(packet_raw, varint, varlen);
+            memmove(packet_raw, varint, varlen);
             packet_raw += varlen;
             break;
         case '*': // pointer/array
@@ -252,19 +211,26 @@ int format_packet(bot_t *bot, void *packet_data, void *packet_raw)
             size_t size_elem = format_sizeof(*fmt);
             if(packet_raw - save + size_elem * arr_len > len)
                 return -1; // TODO: compression
-            void *arr = *((void **)packet_data);
+            void *arr = *(void **)packet_data;
             for(int i = 0; i < arr_len * size_elem; i += size_elem) {
-                packet_raw = push(packet_raw, arr + i, size_elem);
-                reverse(packet_raw - size_elem, size_elem);
+                network_order = value_at(arr + i, size_elem);
+                network_order = reverse(network_order, size_elem);
+                packet_raw = push(packet_raw, &network_order, size_elem);
             }
             break;
-        default:
+        case 'b':
+        case 'h':
+        case 'w':
+        case 'l':
             ;
             if(packet_raw - save + size > len)
                 return -1; // TODO: compression
-            packet_raw = push(packet_raw, packet_data, size);
-            reverse(packet_raw - size, size);
-            arr_len = value_at(packet_data, size);
+
+            network_order = value_at(packet_data, size);
+            arr_len = network_order;
+            network_order = reverse(network_order, size);
+            packet_raw = push(packet_raw, &network_order, size);
+
             break;
         }
         packet_data += size;
@@ -274,14 +240,19 @@ int format_packet(bot_t *bot, void *packet_data, void *packet_raw)
     varlen = varint32_encode(packet_raw - save, varint, 5);
     if(packet_raw - save + varlen > len)
         return -1; // TODO: compression
-    reentrant_memmove(save + varlen, save, packet_raw - save);
-    reentrant_memmove(save, varint, varlen);
+    memmove(save + varlen, save, packet_raw - save);
+    memmove(save, varint, varlen);
     return packet_raw - save + varlen;
 }
 
 /* TODO: Add bounds checking on packet_raw */
-void *marshal_slot(void *_packet_raw, int16_t block_id, int8_t count, int16_t damage, nbt_node *tree)
+void *marshal_slot(void *_packet_raw, slot_t *slot_data)
 {
+    int16_t block_id = slot_data->block_id;
+    int8_t count = slot_data->count;
+    int16_t damage = slot_data->damage;
+    nbt_node *tree = slot_data->tree;
+
     char *packet_raw = _packet_raw;
     if (-1 == block_id) { // Empty slot is 0xffff
         int16_t ffff = 0xffff;
@@ -319,36 +290,50 @@ void *marshal_slot(void *_packet_raw, int16_t block_id, int8_t count, int16_t da
     return packet_raw;
 }
 
-void demarshal_slot(void *_data, int16_t *block_id, int8_t *count,
-                    int16_t *damage, nbt_t *nbt_data)
+uint64_t demarshal_slot(void *_data, slot_t *slot_data, uint64_t space_left)
 {
     char *data = _data; 
-    memcpy(block_id, data, sizeof(*block_id));
-    data += sizeof(*block_id);
-    *block_id = ntohs(*block_id); 
 
-    *count = *data;
-    data += sizeof(char);
+    /* Read 2 bytes (block_id) */
+    memcpy(&slot_data->block_id, data, sizeof(slot_data->block_id));
+    data += sizeof(slot_data->block_id);
+    slot_data->block_id = ntohs(slot_data->block_id); 
 
-    memcpy(damage, data, sizeof(*damage));
-    data += sizeof(*damage);
-    *damage = ntohs(*damage);
+    /* Read 1 byte (count) */
+    slot_data->count = *data;
+    data += sizeof(slot_data->count);
 
-    int16_t nbt_length;
-    if(*data) {
-        exit(1); 
-        /* TODO: parse nbt data */
-    } else {
-        nbt_data->length = 0;
-        nbt_data->data = NULL;
-    }
+    /* Read 2 bytes (damage) */
+    memcpy(&slot_data->damage, data, sizeof(slot_data->damage));
+    data += sizeof(slot_data->damage);
+    slot_data->damage = ntohs(slot_data->damage);
    
+    uint64_t nbt_length;
+    if(*data) { /* If next byte is non-zero */
+        /* nbt_parse(const void* memory, size_t length); */
+        nbt_node *tree = nbt_parse(data + 1, space_left);
+        if (!tree) /* Error */
+            exit(1);
+        slot_data->tree = tree;
+        struct buffer nbt_bin = nbt_dump_binary(tree);
+        nbt_length = nbt_bin.len;
+        free(nbt_bin.data);
+    } else { /* No nbt data */
+        slot_data->tree = NULL;
+        nbt_length = 0;
+    }
+    return nbt_length + 6;
 }
 
-int decode_packet(bot_t *bot, void *packet_raw, void *packet_data)
+int decode_packet(bot_t *bot, void *_packet_raw, void *_packet_data)
 {
     // packet_raw = raw packet data
     // packet_data = struct containing packet data
+    //
+    char *packet_raw = _packet_raw;
+    char *packet_data = _packet_data;
+
+    uint64_t bytes_read = 0; /* bytes read from packet_raw */
     uint32_t len;
     vint32_t value;
     uint32_t arr_len = -1;
@@ -356,29 +341,51 @@ int decode_packet(bot_t *bot, void *packet_raw, void *packet_data)
 
     char *fmt = *((char **)packet_data);
     assert(fmt != 0);
-    packet_data += sizeof(void *);
+    packet_data += sizeof(char *);
 
     int32_t packet_size;
     int packet_size_len = varint32(packet_raw, &packet_size);
     packet_raw += packet_size_len;
+    bytes_read += packet_size_len;
 
+    uint64_t host_order;
     while(*fmt) {
         size = format_sizeof(*fmt);
-        packet_data = (void *)align(packet_data, size);
+        packet_data = (char *)align(packet_data, size);
         switch(*fmt) {
+        case 'k':
+            /* cNBT has no function to calculate the length of a nbt tree in
+             * its binary form. The only way to do this is to dump the tree,
+             * which will give us the length. Thanks.
+             **/
+        {
+            slot_t *slot_data = (slot_t *)packet_data;
+            uint64_t slot_length = demarshal_slot(packet_raw, slot_data, bytes_read);
+            packet_raw += slot_length;
+            bytes_read += slot_length;
+            break;
+        }
+        case 'q':
+            memcpy(packet_data, packet_raw, size);
+            packet_raw += size;
+            bytes_read += size;
+            break;
         case 's': // varint followed by string
             len = varint32(packet_raw, &value);
             packet_raw += len;
+            bytes_read += size;
             char *str = calloc(value + 1, sizeof(char)); // null terminated
-            reentrant_memmove(str, packet_raw, value);
+            memmove(str, packet_raw, value);
             *((char **)packet_data) = str;
             packet_raw += value;
+            bytes_read += value;
             break;
         case 'v': // varint
             len = varint32(packet_raw, &value);
             arr_len = value;
-            reentrant_memmove(packet_data, &value, sizeof(vint32_t));
+            memmove(packet_data, &value, sizeof(vint32_t));
             packet_raw += len;
+            bytes_read += len;
             break;
         case '*':
             fmt++;
@@ -386,18 +393,27 @@ int decode_packet(bot_t *bot, void *packet_raw, void *packet_data)
             assert(arr_len != -1);
             void *arr = calloc(arr_len, size_elem);
             for(int i = 0; i < arr_len * size_elem; i += size_elem) {
-                reentrant_memmove(arr + i, packet_raw + i, size_elem);
-                reverse(arr + i, size_elem);
+                host_order = value_at(packet_raw + i, size_elem);
+                host_order = reverse(host_order, size_elem);
+                memmove(arr + i, &host_order, size_elem);
             }
-            *((void **)packet_data) = arr;
+            *(void **)packet_data = arr;
             packet_raw += arr_len * size_elem;
+            bytes_read += arr_len * size_elem;
             break;
-        default:
+        case 'b':
+        case 'h':
+        case 'w':
+        case 'l':
             ;
-            reentrant_memmove(packet_data, packet_raw, size);
-            reverse(packet_data, size);
-            arr_len = value_at(packet_data, size);
+
+            host_order = value_at(packet_raw, size);
+            host_order = reverse(host_order, size);
+            memmove(packet_data, &host_order, size);
+
+            arr_len = host_order;
             packet_raw += size;
+            bytes_read += size;
             break;
         }
         packet_data += size;
@@ -418,16 +434,17 @@ vint32_t peek_packet(bot_t *bot, void *packet_raw)
     return value;
 }
 
-void free_packet(void *packet_data)
+void free_packet(void *_packet_data)
 {
+    char *packet_data = _packet_data;
     char *fmt = *((char **)packet_data);
     void *save = packet_data;
-    packet_data += sizeof(void *);
+    packet_data += sizeof(char *);
     while (*fmt) {
         size_t size = format_sizeof(*fmt);
-        packet_data = (void *)align(packet_data, size);
+        packet_data = (char *)align(packet_data, size);
         if (*fmt == 's' || *fmt == '*') {
-            free(*((void **)packet_data));
+            free(*(void **)packet_data);
             if(*fmt == '*')
                 fmt++;
         }

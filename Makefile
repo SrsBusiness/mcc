@@ -32,6 +32,10 @@ $(TARGET): $(SHAREDLIB) $(SAMPLE) | $(BIN)
 	$(CC) $(SAMPLE) $(OBJECTS) $(NBTOBJECTS) -o $@ $(LDFLAGS)
 
 # Rules for making all object files
+debug: CFLAGS += -g
+debug: clean
+debug: all
+
 $(OBJ)/%.o: $(SRC)/%.c | $(OBJ)
 	$(CC) $(CFLAGS) $< -o $@
 
@@ -44,15 +48,10 @@ $(SHAREDLIB): $(OBJECTS) $(NBTOBJECTS) | $(LIB)
 	ln $(SHAREDLIB) $(LIB)/libmcc.so
 
 .PHONY: test
-test: $(SHAREDLIB) $(TEST) | $(BIN)
+test: CFLAGS += -g
+test: $(OBJECTS) $(NBTOBJECTS) $(TEST) | $(BIN)
 	$(CC) $(TEST) $(OBJECTS) $(NBTOBJECTS) -o $(BIN)/$@ $(LDFLAGS)
 	$(BIN)/$@
-
-# I don't understand this rule, but it works
-.PHONY: run
-run: export LD_LIBRARY_PATH=$(DIR)/$(LIB)
-run: $(SHAREDLIB)
-	$(BIN)/$(EXEC)
 
 .PHONY: clean
 clean:
