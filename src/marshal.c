@@ -282,6 +282,7 @@ void *marshal_slot(void *_packet_raw, slot_t *slot_data)
             packet_raw += sizeof(int8_t);
             memcpy(packet_raw, nbt_data.data, nbt_data.len);
             packet_raw += nbt_data.len;
+            free(nbt_data.data);
         } else {
             memset(packet_raw, 0, sizeof(int8_t));
             packet_raw += sizeof(int8_t);
