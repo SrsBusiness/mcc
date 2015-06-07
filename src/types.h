@@ -10,7 +10,7 @@ typedef void* metadata_t;
 typedef void* property_t;
 typedef void* record_t;
 
-typedef struct _nbt_t{
+typedef struct _nbt_t {
     int length;
     void *data;
 } nbt_t;

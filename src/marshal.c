@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <arpa/inet.h>
+#include <errno.h>
 #include "marshal.h"
 #include "bot.h"
 #include "protocol.h"
@@ -77,7 +78,6 @@ int varint32_encode(int32_t value, char *data, int len)
 // words as well.
 uint64_t reverse(uint64_t number, int len)
 {
-    //printf("Unreversed: %llx, size: %d\n", number, len);
     if(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) { // we need to fliparoo!
         switch(len) {
         case sizeof(uint8_t):
@@ -96,7 +96,6 @@ uint64_t reverse(uint64_t number, int len)
             exit(-1);
         }
     }
-    //printf("Reversed: %llx, size: %d\n", number, len);
     return number;
 }
 
@@ -174,11 +173,11 @@ int format_packet(bot_t *bot, void *_packet_data, void *_packet_raw)
         size = format_sizeof(*fmt);
         packet_data = (char *)align(packet_data, size);
         switch(*fmt) {
-        case 'k':{ /* k is for slot. What, do you have a better idea? */
+        case 'k': { /* k is for slot. What, do you have a better idea? */
             slot_t *slot_data = (slot_t *)packet_data;
             packet_raw  = marshal_slot(packet_raw, slot_data);
             break;
-        }       
+        }
         case 'q':
             memcpy(packet_raw, packet_data, size);
             packet_raw += size;
@@ -238,8 +237,9 @@ int format_packet(bot_t *bot, void *_packet_data, void *_packet_raw)
     }
 
     varlen = varint32_encode(packet_raw - save, varint, 5);
-    if(packet_raw - save + varlen > len)
+    if(packet_raw - save + varlen > len) {
         return -1; // TODO: compression
+    }
     memmove(save + varlen, save, packet_raw - save);
     memmove(save, varint, varlen);
     return packet_raw - save + varlen;
@@ -249,37 +249,34 @@ int format_packet(bot_t *bot, void *_packet_data, void *_packet_raw)
 void *marshal_slot(void *_packet_raw, slot_t *slot_data)
 {
     int16_t block_id = slot_data->block_id;
-    int8_t count = slot_data->count;
-    int16_t damage = slot_data->damage;
-    nbt_node *tree = slot_data->tree;
 
     char *packet_raw = _packet_raw;
     if (-1 == block_id) { // Empty slot is 0xffff
-        int16_t ffff = 0xffff;
-        return push(_packet_raw, &ffff, sizeof(ffff));
+        return push(packet_raw, block_id, sizeof(block_id));
     } else {
+        int8_t count = slot_data->count;
+        int16_t damage = slot_data->damage;
+        nbt_node *tree = slot_data->tree;
+
         /* Convert little to big endian; flip the bytes. */
         block_id = htons(block_id);
         damage = htons(damage);
 
         /* copy block_id (2 bytes) */
-        memcpy(packet_raw, &block_id, sizeof(block_id)); 
+        memcpy(packet_raw, &block_id, sizeof(block_id));
         packet_raw += sizeof(block_id);
 
         /* copy count (1 byte) */
-        memcpy(packet_raw, &count, sizeof(count)); 
-        packet_raw += sizeof(count); 
+        memcpy(packet_raw, &count, sizeof(count));
+        packet_raw += sizeof(count);
 
         /* copy damage (2 bytes) */
         memcpy(packet_raw, &damage, sizeof(damage));
         packet_raw += sizeof(damage);
-                  
+
         if (tree) {
             /* convert nbt tree to binary nbt data */
             struct buffer nbt_data = nbt_dump_binary(tree);
-
-            memset(packet_raw, 1, sizeof(int8_t));
-            packet_raw += sizeof(int8_t);
             memcpy(packet_raw, nbt_data.data, nbt_data.len);
             packet_raw += nbt_data.len;
             free(nbt_data.data);
@@ -291,14 +288,20 @@ void *marshal_slot(void *_packet_raw, slot_t *slot_data)
     return packet_raw;
 }
 
+/* Returns the length of the slot data so decode_packet knows how much of
+ * the raw packet data is for slot
+ **/
 uint64_t demarshal_slot(void *_data, slot_t *slot_data, uint64_t space_left)
 {
-    char *data = _data; 
+    char *data = _data;
 
     /* Read 2 bytes (block_id) */
     memcpy(&slot_data->block_id, data, sizeof(slot_data->block_id));
     data += sizeof(slot_data->block_id);
-    slot_data->block_id = ntohs(slot_data->block_id); 
+    slot_data->block_id = ntohs(slot_data->block_id);
+    if(slot_data->block_id == -1) { /* No slot data */
+        return sizeof(int16_t); /* Must return length as 2 */
+    }
 
     /* Read 1 byte (count) */
     slot_data->count = *data;
@@ -308,22 +311,22 @@ uint64_t demarshal_slot(void *_data, slot_t *slot_data, uint64_t space_left)
     memcpy(&slot_data->damage, data, sizeof(slot_data->damage));
     data += sizeof(slot_data->damage);
     slot_data->damage = ntohs(slot_data->damage);
-   
+
     uint64_t nbt_length;
     if(*data) { /* If next byte is non-zero */
-        /* nbt_parse(const void* memory, size_t length); */
-        nbt_node *tree = nbt_parse(data + 1, space_left);
-        if (!tree) /* Error */
+        nbt_node *tree = nbt_parse(data, space_left);
+        if (!tree) {/* Error */
             exit(1);
+        }
         slot_data->tree = tree;
         struct buffer nbt_bin = nbt_dump_binary(tree);
         nbt_length = nbt_bin.len;
         free(nbt_bin.data);
     } else { /* No nbt data */
         slot_data->tree = NULL;
-        nbt_length = 0;
+        nbt_length = 1;
     }
-    return nbt_length + 6;
+    return nbt_length + 5;
 }
 
 int decode_packet(bot_t *bot, void *_packet_raw, void *_packet_data)
@@ -355,13 +358,20 @@ int decode_packet(bot_t *bot, void *_packet_raw, void *_packet_data)
         packet_data = (char *)align(packet_data, size);
         switch(*fmt) {
         case 'k':
-            /* cNBT has no function to calculate the length of a nbt tree in
+            /* Notch decided it was a good idea not to tell us the length of
+             * the nbt binary data. cNBT expects us the know this length. We
+             * use the number of bytes left in the packet.
+             * cNBT has no function to calculate the length of a nbt tree in
              * its binary form. The only way to do this is to dump the tree,
              * which will give us the length. Thanks.
              **/
         {
             slot_t *slot_data = (slot_t *)packet_data;
-            uint64_t slot_length = demarshal_slot(packet_raw, slot_data, bytes_read);
+            /* bytes_read is the total number of bytes read whereas
+             * packet_size is only the number of bytes read starting from
+             * the packet_id. Thus, the max number of bytes available for slot
+             * is packet_size + packet_size_len - bytes_read*/
+            uint64_t slot_length = demarshal_slot(packet_raw, slot_data, packet_size + packet_size_len - bytes_read);
             packet_raw += slot_length;
             bytes_read += slot_length;
             break;

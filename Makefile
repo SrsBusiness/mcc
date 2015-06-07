@@ -1,6 +1,6 @@
 VERSION = 0.0.1
 
-CC      = gcc
+CC      = clang
 SA      = scan-build
 
 DIR 	:= $(shell pwd)
@@ -33,6 +33,7 @@ $(TARGET): $(SHAREDLIB) $(SAMPLE) | $(BIN)
 
 # Rules for making all object files
 debug: CFLAGS += -g
+debug: NBTFLAGS += -g
 debug: clean
 debug: all
 
@@ -49,6 +50,7 @@ $(SHAREDLIB): $(OBJECTS) $(NBTOBJECTS) | $(LIB)
 
 .PHONY: test
 test: CFLAGS += -g
+test: NBTFLAGS += -g
 test: $(OBJECTS) $(NBTOBJECTS) $(TEST) | $(BIN)
 	$(CC) $(TEST) $(OBJECTS) $(NBTOBJECTS) -o $(BIN)/$@ $(LDFLAGS)
 	$(BIN)/$@

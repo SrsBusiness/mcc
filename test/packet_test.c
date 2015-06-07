@@ -18,7 +18,8 @@ int random_fmt(char *, int);
 FILE *urandom;
 
 
-void hexdump(char *title, void *buffer, int len) {
+void hexdump(char *title, void *buffer, int len)
+{
     return;
 }
 
