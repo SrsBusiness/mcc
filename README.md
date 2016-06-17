@@ -22,14 +22,16 @@ See the
 [sample folder](https://github.com/NosotrosNueces/mcc/tree/master/sample) for
 example bots.
 
+## Getting Started ##
+Requires libuv. Probably won't work on non-Linux systems. 
 
 ## Getting Started ##
 Cloning the repo and running make should get you up and running::
 
-    $ git clone git@github.com:NosotrosNueces/mcc.git
+    $ git clone https://github.com/SrsBusiness/mcc.git
     $ cd mcc
     $ make
-    $ ./mcc
+    $ ./bin/mcc
 
 The sample binary has a few options::
 
