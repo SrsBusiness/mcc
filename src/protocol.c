@@ -1847,8 +1847,6 @@ void deserialize_clientbound_play_keep_alive(char *packet_data, struct bot_agent
 
     packet_data = _read_vint32(packet_data, &keep_alive_id, bot);
 
-    printf("Keep alive id: %d\n", keep_alive_id);
-    
     send_play_serverbound_keep_alive(
             bot,
             keep_alive_id

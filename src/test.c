@@ -5,6 +5,10 @@
 #include "bot.h"
 #include "protocol.h"
 
+#define SERVER_NAME "localhost"
+#define DEFAULT_SERVER_PORT 25565
+#define BOT_NAME "foo4"
+
 void *_read(void *buffer, void *storage, size_t size);
 void *_read_vint32(void *buffer, int32_t *val);
 void *_read_string(void *buffer, char **strptr, int32_t *len);
@@ -79,8 +83,7 @@ void player_list_item (
             struct bot_agent *bot,
             vint32_t action_type,
             vint32_t number_of_players,
-            struct player_list_action *player_actions
-            ) {
+            struct player_list_action *player_actions) {
     for (int i = 0; i < number_of_players; i++) {
         switch(action_type) {
             case PLAYER_LIST_ADD_PLAYER:
@@ -107,6 +110,28 @@ void player_list_item (
     }
 }
 
+void rel_move (
+        struct bot_agent *bot,
+        vint32_t entity_id,
+        int16_t delta_x,
+        int16_t delta_y,
+        int16_t delta_z,
+        bool on_ground) { 
+    send_play_serverbound_player_look(bot, 0, 0, true);
+
+    //send_play_serverbound_animation(bot, 0);
+    send_play_serverbound_animation(bot, 1);
+    
+    send_play_serverbound_use_entity(
+            bot,
+            entity_id,
+            1,
+            0,
+            0,
+            0,
+            0);
+}
+
 void chunk_data(
         struct bot_agent *bot,
         int32_t chunk_x,
@@ -117,8 +142,7 @@ void chunk_data(
         struct chunk_section *data,
         struct biome_record *biomes,
         vint32_t number_of_block_entities,
-        struct nbt_tag *block_entities
-        ) {
+        struct nbt_tag *block_entities) {
 
     printf("Xcoord, Zcoord: %d, %d\n", chunk_x, chunk_z);
     int chunk_index = 0;
@@ -160,40 +184,63 @@ void update_health (
             vint32_t food,
             float food_saturation
             ) {
-    if (health < 0.0) {
+    if (health <= 0.0) {
         send_play_serverbound_client_status(bot, 0);
     }
     printf("Update health: %f\n", health);
+ //   _health = health;
 }
 
 
-int main() {
+int main(int argc, char *argv[], char **envp)
+{
+    char *server_name = SERVER_NAME;
+    int server_port = DEFAULT_SERVER_PORT;
+    if (argc == 3) {
+        server_name = argv[1];
+        server_port = strtol(argv[2], NULL, 10);
+        if (!server_port) {
+            printf("Expected arguments: ./mcc [<SERVER> [<PORT>]]\n");
+            return 0;
+        }
+    } else if (argc == 2) {
+        server_name = argv[1];
+    } else if (argc > 3) {
+        printf("Expected arguments: ./mcc [<SERVER> [<PORT>]]\n");
+        return 0;
+    }
+
     struct bot_agent bot;
-    init_bot(&bot, "foo");
+    init_bot(&bot, BOT_NAME);
+
     bot.callbacks.clientbound_play_player_list_item_cb = player_list_item;
     //bot.callbacks.clientbound_play_chunk_data_cb = chunk_data;
+    bot.callbacks.clientbound_play_entity_relative_move_cb = rel_move;
     bot.callbacks.clientbound_play_spawn_player_cb = spawn_player;
     bot.callbacks.clientbound_play_update_health_cb = update_health;    
+
     list_init(&player_list);
 
-    join_server(&bot, "localhost", 25565);
+    join_server(&bot, server_name, server_port);
+
     uv_run(&bot.loop, UV_RUN_DEFAULT);
     while(1);
     uv_loop_close(&bot.loop);
-    
-
-    //FILE *f = fopen("hello_world.nbt", "rb");
-    //if (f == NULL) {
-    //    return -1;
-    //}
-    //fseek(f, 0, SEEK_END);
-    //long length = ftell(f);
-    //fseek(f, 0, SEEK_SET);
-    //char *nbt = malloc(length);
-    //fread(nbt, length, sizeof(char), f);
-    //uint32_t bytes_read;
-    //struct nbt_tag *root = nbt_parse(nbt, &bytes_read);
-    //nbt_print(root);
-    //printf("Bytes read: %u\n", bytes_read);
-    //printf("length: %ld\n", length);
+ 
+    return 0;
 }
+
+//FILE *f = fopen("hello_world.nbt", "rb");
+//if (f == NULL) {
+//    return -1;
+//}
+//fseek(f, 0, SEEK_END);
+//long length = ftell(f);
+//fseek(f, 0, SEEK_SET);
+//char *nbt = malloc(length);
+//fread(nbt, length, sizeof(char), f);
+//uint32_t bytes_read;
+//struct nbt_tag *root = nbt_parse(nbt, &bytes_read);
+//nbt_print(root);
+//printf("Bytes read: %u\n", bytes_read);
+//printf("length: %ld\n", length);
