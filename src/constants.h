@@ -494,12 +494,45 @@
 #define MINECRAFT_MINECART_HOPPER                   46                      
 #define MINECRAFT_MINECART_SPAWNER                  47                      
 #define MINECRAFT_MOB                               48                      
-#define MINECRAFT_MONSTER                           49                         
+#define MINECRAFT_MONSTER                           49                       
 
+#define MINECRAFT_CREEPER                           50
+#define MINECRAFT_SKELETON                          MINECRAFT_CREEPER
+#define MINECRAFT_WITHER_SKELETON                   51
+#define MINECRAFT_STRAY                             MINECRAFT_WITHER_SKELETON
+#define MINECRAFT_SPIDER                            52
+#define MINECRAFT_GIANT                             53
+#define MINECRAFT_ZOMBIE                            54
+#define MINECRAFT_ZOMBIE_VILLAGER                   MINECRAFT_ZOMBIE
+#define MINECRAFT_HUSK                              MINECRAFT_ZOMBIE_VILLAGER
+#define MINECRAFT_SLIME                             55
+#define MINECRAFT_GHAST                             56
+#define MINECRAFT_ZOMBIE_PIGMAN                     57
+#define MINECRAFT_ENDERMAN                          58
+#define MINECRAFT_CAVE_SPIDER                       59
+#define MINECRAFT_SILVERFISH                        60
+#define MINECRAFT_BLAZE                             61
+#define MINECRAFT_MAGMA_CUBE                        62
+#define MINECRAFT_ENDER_DRAGON                      63
+#define MINECRAFT_WITHER                            64
+#define MINECRAFT_WITCH                             66
+#define MINECRAFT_ENDERMITE                         67
+#define MINECRAFT_GUARDIAN                          68
+#define MINECRAFT_ELDER_GUARDIAN                    MINECRAFT_GUARDIAN
+#define MINECRAFT_SHULKER                           69
 
-
-
-
+#define MINECRAFT_BAT
+#define MINECRAFT_PIG
+#define MINECRAFT_SHEEP
+#define MINECRAFT_COW
+#define MINECRAFT_CHICKEN
+#define MINECRAFT_SQUID
+#define MINECRAFT_WOLF
+#define MINECRAFT_MOOSHROOM
+#define MINECRAFT_SNOWMAN
+#define MINECRAFT_OCELOT
+#define MINECRAFT_VILLAGER_GOLEM
+#
 
 
 

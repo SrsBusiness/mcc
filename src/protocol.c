@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <uv.h>
 #include <zlib.h>
+#include "auth.h"
 #include "protocol.h"
 #include "serial.h"
 #include "nbt.h"
@@ -1014,6 +1015,7 @@ void deserialize_clientbound_login_encryption_request(char *packet_data, struct 
     unsigned char *verify_token;
 
     packet_data = _read_string(packet_data, &server_id, NULL, bot);
+    printf("Server ID: %s\n", server_id);
     packet_data = _read_vint32(packet_data, &public_key_length, bot);
     public_key = malloc(public_key_length);
     packet_data = _read(packet_data, public_key, public_key_length, bot);
@@ -1031,7 +1033,8 @@ void deserialize_clientbound_login_encryption_request(char *packet_data, struct 
                 verify_token
                 );
     }
-
+    
+    bot->server_id = server_id;
     bot->public_key_length = public_key_length;
     bot->public_key = public_key;
     bot->verify_token_length = verify_token_length;
@@ -1049,8 +1052,18 @@ void deserialize_clientbound_login_encryption_request(char *packet_data, struct 
     EVP_EncryptInit_ex(&bot->ctx_encrypt, EVP_aes_128_cfb8(), NULL, bot->ss, bot->ss);
     EVP_DecryptInit_ex(&bot->ctx_decrypt, EVP_aes_128_cfb8(), NULL, bot->ss, bot->ss);
     random_bytes(sizeof(bot->ss), bot->ss);
+
+    FILE *f = fopen("shared_secret", "wb");
+    fwrite(bot->ss, 1, sizeof(bot->ss), f);
+    fwrite(public_key, 1, public_key_length, f);
+    fclose(f);
+
     int ss_cipher_length = RSA_public_encrypt(sizeof(bot->ss), bot->ss, ss_cipher, r, RSA_PKCS1_PADDING);
     int token_cipher_length = RSA_public_encrypt(verify_token_length, verify_token, token_cipher, r, RSA_PKCS1_PADDING);
+    
+    char *hash = server_hash(server_id, SECRET_KEY_LENGTH, bot->ss, public_key_length, public_key);
+
+    session_join(bot->access_token, bot->client_token, bot->profile, bot->name, hash);
 
     send_login_serverbound_encryption_response(
             bot,
@@ -1062,7 +1075,7 @@ void deserialize_clientbound_login_encryption_request(char *packet_data, struct 
     bot->encryption_enabled = 1;
 
     RSA_free(r);
-    free(server_id);
+    free(hash);
     free(ss_cipher);
     free(token_cipher);
 }
@@ -1074,6 +1087,8 @@ void deserialize_clientbound_login_login_success(char *packet_data, struct bot_a
     packet_data = _read_string(packet_data, &uuid, NULL, bot);
     packet_data = _read_string(packet_data, &username, NULL, bot);
     bot->current_state = PLAY;
+    
+
     if (bot->callbacks.clientbound_login_login_success_cb != NULL) {
         bot->callbacks.clientbound_login_login_success_cb(
                 bot,

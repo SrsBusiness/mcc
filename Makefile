@@ -5,8 +5,8 @@ SA      = scan-build
 
 DIR 	:= $(pwd)
 
-CFLAGS  = -Wall -Isrc --std=c11 -D_GNU_SOURCE -g
-LDFLAGS = -lpthread -lm -luv -lz -lssl -lcrypto
+CFLAGS  	= $(shell cat .cflags)
+LDFLAGS 	= -lpthread -lm -luv -lz -lssl -lcrypto -lcurl -ljson-c
 
 SRC		= src
 LIB		= lib
@@ -14,13 +14,22 @@ SHAREDLIB	= $(LIB)/libmcc.so.$(VERSION)
 OBJ		= obj
 BIN		= bin
 TARGET  = $(BIN)/mcc
-SRCFILES	:= $(wildcard $(SRC)/*.c)
-OBJECTS 	:= $(patsubst $(SRC)/%.c,$(OBJ)/%.o, $(SRCFILES))
+SRCFILES	:=	\
+	auth.c		\
+	bot.c		\
+	nbt.c		\
+	protocol.c	\
+	serial.c	\
+	
+OBJECTS 	:= $(patsubst %.c,$(OBJ)/%.o, $(SRCFILES))
 
 all: $(TARGET)
 
 $(TARGET): $(SHAREDLIB) | $(BIN)
-	$(CC) $(OBJECTS) -o $@ $(LDFLAGS)
+	$(CC) $(OBJECTS) $(SRC)/test.c -o $@ $(LDFLAGS)
+
+test: $(SHAREDLIB) | $(BIN)
+	$(CC) $(OBJECTS) $(SRC)/test.c -o test $(LDFLAGS)
 
 debug: CFLAGS += -g
 debug: clean

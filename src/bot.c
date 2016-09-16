@@ -1,3 +1,4 @@
+#include <curl/curl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -11,8 +12,10 @@
 #include <assert.h>
 #include <uv.h>
 #include <zlib.h>
+#include "auth.h"
 #include "bot.h"
 #include "protocol.h"
+#include "serial.h"
 #include "types.h"
 
 #define PROTOCOL_VERSION 210
@@ -20,8 +23,7 @@
 void init_callbacks(struct _callbacks *callbacks);
 
 /* Populates the bot struct with default values */
-void init_bot(struct bot_agent *bot, char *name) {
-    bot->name = name;
+void init_bot(struct bot_agent *bot, char *name, int auth, char *username, char *passwd) {
     bot->current_state = LOGIN;
     uv_loop_init(&bot->loop);
 	uv_tcp_init(&bot->loop, &bot->socket);
@@ -49,8 +51,24 @@ void init_bot(struct bot_agent *bot, char *name) {
     inflateInit(&bot->decompression_stream);
 
     bot->encryption_enabled = 0;
+    
+    if (auth) {
+        bot->username = username;
+        bot->passwd = passwd;
+        minecraft_authenticate(bot->username, bot->passwd, &bot->access_token, &bot->client_token, &bot->profile, &bot->name);
+    } else {
+        size_t len = strlen(name) + 1;
+        bot->name = malloc(len);
+        strncpy(bot->name, name, len);
+    }
 
     init_callbacks(&bot->callbacks);
+}
+
+void authenticate() {
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+    CURL *curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, "https://authserver.mojang.com");
 }
 
 void init_callbacks(struct _callbacks *callbacks) {
@@ -190,12 +208,6 @@ void getaddrinfo_cb(uv_getaddrinfo_t *req, int status, struct addrinfo *response
 }
 
 void join_server_hostname(struct bot_agent *bot, char *server_hostname, char *service) {
-    struct addrinfo hints;
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = 0;
-
     bot->server_addr = server_hostname;
     uv_getaddrinfo_t *req = malloc(sizeof(uv_getaddrinfo_t));
     req->data = bot;

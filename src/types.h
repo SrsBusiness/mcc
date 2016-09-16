@@ -1056,6 +1056,7 @@ enum MCC_ERR {
 struct bot_agent {
     int32_t eid;
     // 0: survival, 1: creative, 2: adventure. Bit 3 (0x8) is the hardcore flag
+    char *server_id;
     uint8_t gamemode;
     // -1: nether, 0: overworld, 1: end
     enum MINECRAFT_DIMENSION dimension;
@@ -1090,6 +1091,10 @@ struct bot_agent {
 
     int mcc_status;
 
+    /* Auth */
+    char *username;
+    char *passwd;
+
     /* Compression stuff */
     int compression_enabled;
     z_stream compression_stream;    
@@ -1106,6 +1111,12 @@ struct bot_agent {
     uint32_t block_size;
     EVP_CIPHER_CTX ctx_encrypt;
     EVP_CIPHER_CTX ctx_decrypt;
+
+    /* Auth */
+    char *profile;
+    char *access_token;
+    char *client_token;
+    char *hash;
 
     int32_t packet_capacity;
     int32_t packet_length;
