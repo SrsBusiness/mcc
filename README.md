@@ -4,7 +4,7 @@ MCC
 [![Build Status](https://travis-ci.org/NosotrosNueces/mcc.svg?branch=travis)](https://travis-ci.org/NosotrosNueces/mcc)
 [![Gitter](https://badges.gitter.im/Join Chat.svg)](https://gitter.im/NosotrosNueces/mcc?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-MCC is a MineCraft Client API written in C. MCC hopes to aid automation in
+MCC is a Minecraft Client API written in C. MCC hopes to aid automation in
 Minecraft by providing a framework to program bots. MCC provides some
 abstractions and an event-driven interface that makes bot-writing easy.
 
